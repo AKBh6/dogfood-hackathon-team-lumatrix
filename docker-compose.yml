@@ -1,18 +1,14 @@
 version: '3.8'
 
 services:
-  app:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+  dogfood-platform:
+    build: .
     ports:
       - "3000:3000"
-    volumes:
-      # Maps a local ./data folder to the container so you can inspect the SQLite file locally
-      - ./data:/app/data
     environment:
       - NODE_ENV=production
-      - NEXT_TELEMETRY_DISABLED=1
-      # Local, random secret for JWTs/sessions - no external auth providers!
-      - AUTH_SECRET=dogfood_local_offline_secret_2026
-    restart: unless-stopped
+      - DATABASE_URL=file:./dev.db
+      - JWT_SECRET=super-secret-hackathon-key
+    volumes:
+      - ./prisma/dev.db:/app/prisma/dev.db
+    command: sh -c "npx prisma db push && npx prisma db seed && npm run start"

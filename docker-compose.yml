@@ -1,12 +1,18 @@
+version: '3.8'
+
 services:
-  dogfood-platform:
-    build: .
-    container_name: dogfood_app
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "3000:3000"
     volumes:
-      - ./data:/workspace/data
+      # Maps a local ./data folder to the container so you can inspect the SQLite file locally
+      - ./data:/app/data
     environment:
-      - DATABASE_URL=sqlite:////workspace/data/dogfood.db
-      - SECRET_KEY=dogfood-local-secret-key-production-ready
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      # Local, random secret for JWTs/sessions - no external auth providers!
+      - AUTH_SECRET=dogfood_local_offline_secret_2026
     restart: unless-stopped

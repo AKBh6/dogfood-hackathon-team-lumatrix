@@ -1,1 +1,12 @@
-
+services:
+  dogfood-platform:
+    build: .
+    container_name: dogfood_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/workspace/data
+    environment:
+      - DATABASE_URL=sqlite:////workspace/data/dogfood.db
+      - SECRET_KEY=dogfood-local-secret-key-production-ready
+    restart: unless-stopped

@@ -1,14 +1,12 @@
 version: '3.8'
 
 services:
-  dogfood-platform:
+  web:
     build: .
     ports:
       - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=file:./dev.db
-      - JWT_SECRET=super-secret-hackathon-key
     volumes:
-      - ./prisma/dev.db:/app/prisma/dev.db
-    command: sh -c "npx prisma db push && npx prisma db seed && npm run start"
+      - ./prisma:/app/prisma
+    environment:
+      - DATABASE_URL=file:./dev.db
+      - JWT_SECRET=your-super-secret-jwt-key

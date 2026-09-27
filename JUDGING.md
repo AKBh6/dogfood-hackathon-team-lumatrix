@@ -1,1 +1,1 @@
-
+Normalization Strategy: Z-Score StandardizationTo eliminate judge bias (harsh vs. generous graders), the platform calculates a Z-Score for every ballot.We calculate the mean ($\mu$) and standard deviation ($\sigma$) of all scores given by a specific judge.For each project that judge scores, we calculate the normalized score:$$Z = \frac{Score - \mu}{\sigma}$$Projects are ranked based on their average $Z$ across all assigned judges, completely neutralizing individual grading curves.

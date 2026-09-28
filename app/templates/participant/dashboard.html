@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Participant Dashboard{% endblock %}
+
+{% block nav %}
+<a href="/logout">Logout</a>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <h2>Builder Portal</h2>
+    <p>Welcome back, <strong>{{ user.full_name }}</strong> ({{ user.role.value }})</p>
+    <div class="card">
+        <h3>Team Status</h3>
+        <p>Manage your team submission, demo links, and repository access here.</p>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Organizer Dashboard{% endblock %}
+{% block title %}Judge Dashboard{% endblock %}
 
 {% block nav %}
 <a href="/logout">Logout</a>
@@ -8,11 +8,11 @@
 
 {% block content %}
 <div class="dashboard-container">
-    <h2>Organizer Control Center</h2>
+    <h2>Judge Evaluation Portal</h2>
     <p>Welcome back, <strong>{{ user.full_name }}</strong></p>
     <div class="card">
-        <h3>Hackathon Overview</h3>
-        <p>Configure rubric weights, track judge progress, and calculate final normalized Z-scores.</p>
+        <h3>Assigned Submissions</h3>
+        <p>Review submitted projects and enter rubric scores.</p>
     </div>
 </div>
 {% endblock %}

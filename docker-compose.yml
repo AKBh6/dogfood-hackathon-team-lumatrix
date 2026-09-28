@@ -4,9 +4,10 @@ services:
   web:
     build: .
     ports:
-      - "3000:3000"
+      - "8000:8000"
     volumes:
-      - ./prisma:/app/prisma
+      - ./data:/app/data
     environment:
-      - DATABASE_URL=file:./dev.db
-      - JWT_SECRET=your-super-secret-jwt-key
+      - DATABASE_URL=sqlite:////app/data/dogfood.db
+      - SECRET_KEY=your-super-secret-jwt-key
+      - ALGORITHM=HS256

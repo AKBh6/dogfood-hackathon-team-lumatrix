@@ -4,9 +4,8 @@ from sqlalchemy import (
     Column, Integer, String, Text, Boolean, Float, 
     DateTime, ForeignKey, Enum, UniqueConstraint
 )
-from sqlalchemy.orm import relationship, declarative_base
-
-Base = declarative_base()
+from sqlalchemy.orm import relationship
+from app.database import Base
 
 class RoleEnum(str, enum.Enum):
     PARTICIPANT = "PARTICIPANT"
@@ -21,7 +20,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
-    role = Column(Enum(RoleEnum), default=RoleEnum.PARTICIPANT, nullable=False)
+    role = Column(Enum(RoleEnum, native_enum=False), default=RoleEnum.PARTICIPANT, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     team_memberships = relationship("TeamMember", back_populates="user")

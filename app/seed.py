@@ -1,33 +1,39 @@
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
+import bcrypt
+from app.database import engine, Base, SessionLocal
 from app.models import User, RoleEnum, Event, RubricCriterion, Team, TeamMember, Submission
-from app.database import SessionLocal
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_pw(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 def seed_offline_fixtures():
+    # Ensure all tables exist before seeding
+    Base.metadata.create_all(bind=engine)
+    
     db = SessionLocal()
     try:
         if db.query(User).first():
-            return  # Already seeded
+            print("Database already seeded.")
+            return
 
         # 1. Base Users
         admin = User(
             email="admin@raptors.dev",
             full_name="Hackathon Admin",
-            hashed_password=pwd_context.hash("admin123"),
+            hashed_password=hash_pw("admin123"),
             role=RoleEnum.ADMIN
         )
         judge = User(
             email="judge@raptors.dev",
             full_name="Principal Judge",
-            hashed_password=pwd_context.hash("judge123"),
+            hashed_password=hash_pw("judge123"),
             role=RoleEnum.JUDGE
         )
         participant = User(
             email="builder@raptors.dev",
             full_name="Lead Builder",
-            hashed_password=pwd_context.hash("build123"),
+            hashed_password=hash_pw("build123"),
             role=RoleEnum.PARTICIPANT
         )
         db.add_all([admin, judge, participant])
@@ -45,7 +51,7 @@ def seed_offline_fixtures():
         db.add(event)
         db.flush()
 
-        # 3. Standard Rubrics (T2)
+        # 3. Standard Rubrics
         criteria = [
             RubricCriterion(event_id=event.id, name="Tier Completion & Correctness", weight=0.40, max_score=10),
             RubricCriterion(event_id=event.id, name="Judging Integrity", weight=0.25, max_score=10),
@@ -76,3 +82,6 @@ def seed_offline_fixtures():
         print("Successfully seeded fixture data.")
     finally:
         db.close()
+
+if __name__ == "__main__":
+    seed_offline_fixtures()

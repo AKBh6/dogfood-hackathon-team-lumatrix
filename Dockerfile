@@ -1,22 +1,21 @@
-FROM node:20-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
-COPY package.json package-lock.json* ./
-RUN npm ci
+# Ensure output is printed directly to terminal
+ENV PYTHONUNBUFFERED=1
 
-# Copy the rest of the application
+# Copy dependency definition
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application source code
 COPY . .
 
-# Generate Prisma Client (required before build)
-RUN npx prisma generate
+# Ensure data directory exists for SQLite storage
+RUN mkdir -p /app/data
 
-# Build the Next.js application
-RUN npm run build
+EXPOSE 8000
 
-# Make the entrypoint script executable
-RUN chmod +x entrypoint.sh
-
-ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["npm", "run", "start"]
+# Seed database first, then launch FastAPI server
+CMD python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000

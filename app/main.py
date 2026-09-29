@@ -566,7 +566,7 @@ def organizer_event(request: Request, db: Session = Depends(get_db),
 @app.post("/organizer/event")
 def organizer_event_post(
     title: str = Form(...), start_at: str = Form(""), end_at: str = Form(""),
-    submission_deadline: str = Form(...), voting_deadline: str = Form(...),
+    submission_deadline: str = Form(...), voting_deadline: str = Form(...), voting_access: str = Form("open"),
     tracks: str = Form(""), prizes: str = Form(""), custom_questions: str = Form(""),
     rubric: str = Form(""),
     db: Session = Depends(get_db),
@@ -584,6 +584,9 @@ def organizer_event_post(
     event.end_at = parse_dt(end_at)
     event.submission_deadline = parse_dt(submission_deadline)
     event.voting_deadline = parse_dt(voting_deadline)
+    if voting_access not in {"open", "email-gated", "authenticated"}:
+        raise HTTPException(400, "Invalid voting access mode.")
+    event.voting_access = voting_access
     event.tracks = "\n".join(parse_lines(tracks))
     event.prizes = "\n".join(parse_lines(prizes))
     event.custom_questions = "\n".join(parse_lines(custom_questions))

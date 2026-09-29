@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import time
 import urllib.parse
+from app.auth import SECRET_KEY
 
 from fastapi import FastAPI, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -28,6 +29,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Dogfood Platform")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
+VOTE_RATE_BUCKET = {}
 
 
 def render(request, name, context, status_code=200):
@@ -250,16 +252,22 @@ def cast_vote(request: Request, submission_id: int = Form(...), email: str = For
         audit(db, event.id, current_user.id if current_user else None, "duplicate_vote_blocked", "submission", submission_id, request)
         db.commit()
         raise HTTPException(409, "A vote has already been recorded for this voter.")
-    window_key = hash_value(voter + ":" + str(int(time.time() // 60)))
-    recent = db.query(AuditLog).filter_by(event_id=event.id, action="vote_rate_limited", ip_hash=hash_value(request.client.host if request.client else "")).count()
-    if recent >= 30:
+    ip_key = hash_value(request.client.host if request.client else "")
+    bucket = (event.id, ip_key, int(time.time() // 60))
+    VOTE_RATE_BUCKET[bucket] = VOTE_RATE_BUCKET.get(bucket, 0) + 1
+    if VOTE_RATE_BUCKET[bucket] > 10:
+        audit(db, event.id, current_user.id if current_user else None, "vote_rate_limited", "submission", submission_id, request)
+        db.commit()
         raise HTTPException(429, "Voting rate limit reached.")
     db.add(Vote(event_id=event.id, submission_id=submission_id,
                 user_id=current_user.id if current_user else None, voter_key=voter,
-                ip_hash=hash_value(request.client.host if request.client else "")))
+                ip_hash=ip_key))
     audit(db, event.id, current_user.id if current_user else None, "vote_cast", "submission", submission_id, request, "voter=" + hash_value(voter))
     db.commit()
-    return {"message": "Vote recorded."}
+    response = Response(json.dumps({"message": "Vote recorded."}), media_type="application/json")
+    if event.voting_access == "open" and not request.cookies.get("voter_key"):
+        response.set_cookie("voter_key", voter.removeprefix("cookie:"), httponly=True, samesite="lax", max_age=86400*30)
+    return response
 
 @app.post("/api/gallery/{submission_id}/comments")
 def add_comment(request: Request, submission_id: int, body: str = Form(...),
@@ -707,7 +715,7 @@ def assign_judge_track(judge_id: int = Form(...), track: str = Form(...),
 @app.get("/embed/gallery", response_class=HTMLResponse)
 def embed_gallery(db: Session = Depends(get_db)):
     submissions = db.query(Submission).join(Team).filter(Submission.is_draft == False).order_by(Submission.submitted_at.desc()).all()
-    return templates.TemplateResponse(request=Request, name="embed_gallery.html", context={"submissions": submissions})
+    return templates.TemplateResponse(request=None, name="embed_gallery.html", context={"submissions": submissions})
 
 @app.get("/organizer/audit", response_class=HTMLResponse)
 def organizer_audit(request: Request, db: Session = Depends(get_db),

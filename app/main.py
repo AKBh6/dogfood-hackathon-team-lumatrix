@@ -674,7 +674,7 @@ def invite_judges(emails: str = Form(...), tracks: str = Form(""),
         db.add(JudgeInvitation(event_id=event.id, email=email, token=token, tracks="\n".join(selected_tracks)))
         invited.append({"email": email, "token": token})
     db.commit()
-    return render(request=None if False else Request, "organizer/event.html", {}) if False else RedirectResponse("/organizer/event?invited=1", 303)
+    return RedirectResponse("/organizer/event?invited=1", 303)
 
 
 @app.post("/organizer/assign")

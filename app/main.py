@@ -713,9 +713,9 @@ def assign_judge_track(judge_id: int = Form(...), track: str = Form(...),
 
 
 @app.get("/embed/gallery", response_class=HTMLResponse)
-def embed_gallery(db: Session = Depends(get_db)):
+def embed_gallery(request: Request, db: Session = Depends(get_db)):
     submissions = db.query(Submission).join(Team).filter(Submission.is_draft == False).order_by(Submission.submitted_at.desc()).all()
-    return templates.TemplateResponse(request=None, name="embed_gallery.html", context={"submissions": submissions})
+    return templates.TemplateResponse(request=request, name="embed_gallery.html", context={"submissions": submissions})
 
 @app.get("/organizer/audit", response_class=HTMLResponse)
 def organizer_audit(request: Request, db: Session = Depends(get_db),

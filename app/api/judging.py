@@ -20,6 +20,20 @@ def assert_assigned(db, judge_id, submission_id):
     if not db.query(JudgeAssignment).filter_by(judge_id=judge_id, submission_id=submission_id).first():
         raise HTTPException(403, "This submission is not assigned to you.")
 
+@router.get("/scores")
+def get_scores(judge: int | None = None, db: Session = Depends(get_db),
+               user: User = Depends(require_roles(RoleEnum.JUDGE, RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    target_id = judge or user.id
+    if user.role == RoleEnum.JUDGE and target_id != user.id:
+        raise HTTPException(403, "Judges cannot view another judge's scores.")
+    rows = db.query(Score).filter_by(judge_id=target_id).all()
+    return [{
+        "submission_id": s.submission_id,
+        "criterion_id": s.criterion_id,
+        "raw_score": s.raw_score,
+        "feedback": s.feedback
+    } for s in rows]
+
 @router.post("/evaluate", status_code=status.HTTP_200_OK)
 def submit_evaluation(payload: ScoreInput, db: Session = Depends(get_db), judge: User = Depends(require_roles(RoleEnum.JUDGE, RoleEnum.ADMIN))):
     if judge.role == RoleEnum.JUDGE:

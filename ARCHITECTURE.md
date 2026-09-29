@@ -1,44 +1,109 @@
 # Architecture
 
-Dogfood 2026 is an offline-first FastAPI application using server-rendered Jinja2 templates, SQLAlchemy, and SQLite by default.
+Dogfood 2026 is a self-hostable FastAPI application with server-rendered Jinja2 pages, SQLAlchemy persistence, and SQLite as the default database. The design keeps the runtime self-contained so the platform can operate without a hosted database, CDN, external API, or frontend framework.
 
-## Runtime
+## Runtime components
 
-- FastAPI + Uvicorn provide the web application.
-- Jinja2 renders the participant, judge, organizer, and public gallery pages.
-- SQLAlchemy maps users, events, teams, submissions, rubric criteria, assignments, and scores.
-- SQLite is the default local database. Docker Compose stores it under `./data`.
-- JWT access tokens are stored in HTTP-only cookies.
-- Passwords are stored as bcrypt hashes, never as plaintext.
-- No external database or frontend service is required.
+```
+Browser
+   |
+   v
+FastAPI + Uvicorn
+   |
+   +--> Jinja2 templates
+   |       |
+   |       +--> HTML/CSS
+   |
+   +--> HTML routes
+   |       |
+   |       +--> participant workflow
+   |       +--> judge workflow
+   |       +--> organizer workflow
+   |       +--> gallery / voting / results
+   |
+   +--> REST API
+           |
+           v
+       SQLAlchemy ORM
+           |
+           v
+      SQLite database
+```
 
-## Roles
+Docker Compose packages the same application and mounts `./data` into the container so the SQLite database persists outside the container.
 
-Public registration creates participant accounts only. Judge and organizer/admin accounts are provisioned by the organizer through the seed data or database administration.
+## Authentication and roles
 
-Participants can create/join teams, save drafts, submit a final project, and view the public gallery.
+Authentication uses bcrypt password hashes and signed JWT access tokens stored in HTTP-only cookies.
 
-Judges can see only submissions assigned to them and submit rubric scores through the judging API.
+The application defines these roles:
 
-Organizers/admins can edit the event title, assign submissions to judges, view normalized results, and export CSV results.
+- PARTICIPANT: team and submission workflow.
+- JUDGE: assigned-project access and rubric evaluation.
+- ORGANIZER: event configuration, assignments, results, audit, certificates, and operational tools.
+- ADMIN: organizer-level administrative access.
+- VISITOR: model-level role value for non-authenticated/public contexts.
 
-## Data flow
+Public registration creates participant accounts only. Judge and organizer accounts are provisioned through seed/administrative workflows.
 
-1. A participant registers and logs in.
-2. The participant creates or joins a team.
-3. The team saves a project draft and submits a final version before the deadline.
-4. An organizer assigns final submissions to judges.
-5. Judges score assigned submissions against the event rubric.
-6. The results service calculates weighted raw scores and judge-relative normalized scores.
-7. Organizers/admins can inspect the results and export them as CSV.
-8. Final submissions are locked against further edits.
+## Event lifecycle
 
-## Offline operation
+1. A participant registers and authenticates.
+2. Participants create or join a team using an invite code.
+3. A team prepares a draft submission and finalizes it before the submission deadline.
+4. Final submissions appear in the public gallery and become eligible for judging.
+5. An organizer configures the rubric and assigns submissions to judges.
+6. Judges evaluate only submissions assigned to them.
+7. Weighted judging scores are normalized using judge-relative z-scores.
+8. Community voting can run in a configured window with access controls, randomized ballots, duplicate-vote protection, rate limiting, and audit logging.
+9. Public results are hidden until the configured voting period closes.
+10. Organizers can inspect results, audit events, generate certificates, create signed judge participation records, and export/import operational data.
 
-The application has no runtime dependency on external APIs, hosted databases, or frontend frameworks. It can run with Python directly or through Docker.
+## Application layers
 
-## Security model
+### Presentation layer
 
-Role checks are enforced on protected routes and APIs. Judge evaluation endpoints verify that the judge is assigned to the submission. Final submissions cannot be edited after submission. Password verification uses bcrypt and authentication uses signed JWTs.
+Jinja2 templates provide server-rendered pages for participants, judges, organizers, authentication, gallery, voting, results, certificates, and embedded gallery views. The frontend uses ordinary HTML/CSS and does not depend on a third-party frontend framework.
 
-This is a hackathon prototype, not a production identity-management system. Email ownership is not verified and there is no email delivery, password reset, MFA, CSRF protection, or database migration system.
+### Application layer
+
+FastAPI routes handle authentication, authorization, event lifecycle operations, team membership, submissions, judging, voting, comments, results, certificates, audit records, signed records, and bulk operations.
+
+### Persistence layer
+
+SQLAlchemy maps the relational domain model to SQLite. The database is created from the SQLAlchemy models through `Base.metadata.create_all()`.
+
+### Algorithm layer
+
+`app/algorithms/normalization.py` contains the judging normalization logic. Weighted raw scores are converted into judge-relative z-scores and then mapped to a bounded 0-100 normalized display score.
+
+## Security controls
+
+- Bcrypt password hashing.
+- Signed JWT authentication in HTTP-only cookies.
+- Role checks on protected routes.
+- Backend judge-assignment verification.
+- Database uniqueness constraints for team membership, judge assignments, criterion evaluations, and event voter keys.
+- Final-submission edit protection.
+- Per-IP in-memory voting rate limiting.
+- Audit records for important organizer and community-voting actions.
+- Ed25519 signatures for judge participation records.
+
+These controls are appropriate for the hackathon prototype. The system does not implement production-grade email verification, password recovery, MFA, CSRF protection, distributed rate limiting, or database migrations.
+
+## Deployment
+
+Local development:
+
+```bash
+python -m app.seed
+uvicorn app.main:app --reload
+```
+
+Docker:
+
+```bash
+docker compose up --build
+```
+
+The Docker image uses Python 3.11, installs the pinned dependency set from `requirements.txt`, seeds the application on startup, and serves the application on port 8000.

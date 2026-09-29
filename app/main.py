@@ -43,7 +43,9 @@ app.include_router(judging.router, prefix="/api/judging")
 
 
 def now():
-    return datetime.now(timezone.utc)
+    # SQLite returns DateTime columns as naive UTC datetimes.
+    # Keep application comparisons in the same representation.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def dashboard(role):

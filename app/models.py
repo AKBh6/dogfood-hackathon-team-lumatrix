@@ -29,6 +29,11 @@ class Event(Base):
     title = Column(String(255), nullable=False)
     submission_deadline = Column(DateTime, nullable=False)
     voting_deadline = Column(DateTime, nullable=False)
+    start_at = Column(DateTime, nullable=True)
+    end_at = Column(DateTime, nullable=True)
+    tracks = Column(Text, nullable=False, default="")
+    prizes = Column(Text, nullable=False, default="")
+    custom_questions = Column(Text, nullable=False, default="")
     is_active = Column(Boolean, default=True, nullable=False)
     rubrics = relationship("RubricCriterion", back_populates="event", cascade="all, delete-orphan")
     teams = relationship("Team", back_populates="event", cascade="all, delete-orphan")
@@ -59,6 +64,14 @@ class Submission(Base):
     team_id = Column(Integer, ForeignKey("teams.id"), unique=True, nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
+    tagline = Column(String(255), nullable=True)
+    thumbnail_url = Column(String(512), nullable=True)
+    image_gallery = Column(Text, nullable=False, default="")
+    demo_video_url = Column(String(512), nullable=True)
+    live_url = Column(String(512), nullable=True)
+    tech_tags = Column(Text, nullable=False, default="")
+    track = Column(String(100), nullable=True)
+    custom_answers = Column(Text, nullable=False, default="")
     repo_url = Column(String(512), nullable=False)
     demo_url = Column(String(512), nullable=True)
     is_draft = Column(Boolean, default=True, nullable=False)
@@ -75,6 +88,15 @@ class RubricCriterion(Base):
     weight = Column(Float, default=1.0, nullable=False)
     max_score = Column(Float, default=10.0, nullable=False)
     event = relationship("Event", back_populates="rubrics")
+
+class JudgeInvitation(Base):
+    __tablename__ = "judge_invitations"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+    email = Column(String(255), nullable=False)
+    token = Column(String(128), unique=True, index=True, nullable=False)
+    invited_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    accepted_at = Column(DateTime, nullable=True)
 
 class JudgeAssignment(Base):
     __tablename__ = "judge_assignments"

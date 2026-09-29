@@ -8,7 +8,7 @@ pitch = "Offline-first hackathon portal with backend-enforced judging isolation,
 [auth]
 organizer = "Cookie: access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNzkzMjgxMTk1fQ.fXkPNQBatcenWxq4hZnYtlzpSeEr7Lz52-6YF4jfR_4"
 judge_a = "Cookie: access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwiZXhwIjoxNzkzMjgxMTk1fQ.ohYAdwAgDzCtxhCXO4HgrwPhX5BEcOcW99em-zGEhT0"
-judge_b = "Cookie: access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IjJ9.eyJzdWIiOiIzIiwiZXhwIjoxNzkzMjgxMTk1fQ.fnB5NFu1-W8SN_eYpbZSN2k9MfmisTM-K6PyrUoFQbI"
+judge_b = "Cookie: access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwiZXhwIjoxNzkzMjgxMTk1fQ.fnB5NFu1-W8SN_eYpbZSN2k9MfmisTM-K6PyrUoFQbI"
 participant = "Cookie: access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0IiwiZXhwIjoxNzkzMjgxMTk1fQ.Oj5hXxs4O1jg2i-6AH70y2Tfp3AYAPsCSXaorHbYp2k"
 
 [routes]

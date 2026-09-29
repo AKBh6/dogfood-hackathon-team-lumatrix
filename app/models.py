@@ -35,6 +35,8 @@ class Event(Base):
     tracks = Column(Text, nullable=False, default="")
     prizes = Column(Text, nullable=False, default="")
     custom_questions = Column(Text, nullable=False, default="")
+    voting_access = Column(String(20), nullable=False, default="open")
+    voting_start_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     rubrics = relationship("RubricCriterion", back_populates="event", cascade="all, delete-orphan")
     teams = relationship("Team", back_populates="event", cascade="all, delete-orphan")
@@ -81,6 +83,39 @@ class Submission(Base):
     scores = relationship("Score", back_populates="submission", cascade="all, delete-orphan")
     assignments = relationship("JudgeAssignment", back_populates="submission", cascade="all, delete-orphan")
 
+class Vote(Base):
+    __tablename__ = "votes"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+    submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    voter_key = Column(String(128), nullable=False)
+    ip_hash = Column(String(128), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    __table_args__ = (UniqueConstraint("event_id", "voter_key", name="uq_event_voter"),)
+
+class GalleryComment(Base):
+    __tablename__ = "gallery_comments"
+    id = Column(Integer, primary_key=True, index=True)
+    submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    author_name = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    is_hidden = Column(Boolean, default=False, nullable=False)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action = Column(String(100), nullable=False)
+    target_type = Column(String(100), nullable=True)
+    target_id = Column(Integer, nullable=True)
+    ip_hash = Column(String(128), nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
 class RubricCriterion(Base):
     __tablename__ = "rubric_criteria"
     id = Column(Integer, primary_key=True, index=True)
@@ -116,6 +151,15 @@ class JudgeAssignment(Base):
     judge = relationship("User", back_populates="judge_assignments")
     submission = relationship("Submission", back_populates="assignments")
     __table_args__ = (UniqueConstraint("judge_id", "submission_id", name="uq_judge_submission"),)
+
+class JudgeParticipationRecord(Base):
+    __tablename__ = "judge_participation_records"
+    id = Column(Integer, primary_key=True, index=True)
+    judge_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+    payload = Column(Text, nullable=False)
+    signature = Column(String(128), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Score(Base):
     __tablename__ = "scores"

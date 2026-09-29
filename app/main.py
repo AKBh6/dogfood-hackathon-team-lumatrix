@@ -423,6 +423,7 @@ def organizer_event_post(
     title: str = Form(...), start_at: str = Form(""), end_at: str = Form(""),
     submission_deadline: str = Form(...), voting_deadline: str = Form(...),
     tracks: str = Form(""), prizes: str = Form(""), custom_questions: str = Form(""),
+    rubric: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))
 ):
@@ -441,6 +442,66 @@ def organizer_event_post(
     event.tracks = "\n".join(parse_lines(tracks))
     event.prizes = "\n".join(parse_lines(prizes))
     event.custom_questions = "\n".join(parse_lines(custom_questions))
+    if rubric.strip():
+        for criterion in list(event.rubrics):
+            db.delete(criterion)
+        db.flush()
+        for line in rubric.splitlines():
+            parts = [x.strip() for x in line.split("|")]
+            if len(parts) != 3:
+                continue
+            name, weight, maximum = parts
+            try:
+                db.add(__import__("app.models", fromlist=["RubricCriterion"]).RubricCriterion(
+                    event_id=event.id, name=name, weight=float(weight), max_score=float(maximum)
+                ))
+            except ValueError:
+                continue
+    db.commit()
+    return RedirectResponse("/organizer/event", 303)
+
+
+@app.get("/organizer/event/new", response_class=HTMLResponse)
+def new_event_page(request: Request, user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    return render(request, "organizer/new_event.html", {"request": request})
+
+
+@app.post("/organizer/event/new")
+def create_event(title: str = Form(...), slug: str = Form(...),
+                 start_at: str = Form(""), end_at: str = Form(""),
+                 submission_deadline: str = Form(...), voting_deadline: str = Form(...),
+                 tracks: str = Form(""), prizes: str = Form(""),
+                 rubric: str = Form(...), custom_questions: str = Form(""),
+                 db: Session = Depends(get_db),
+                 user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    slug = re.sub(r"[^a-z0-9-]+", "-", slug.strip().lower()).strip("-")
+    if not slug or db.query(Event).filter_by(slug=slug).first():
+        raise HTTPException(400, "Event slug is missing or already exists.")
+    def parse_dt(value):
+        return datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+    event = Event(
+        slug=slug, title=title.strip(), start_at=parse_dt(start_at) if start_at else None,
+        end_at=parse_dt(end_at) if end_at else None,
+        submission_deadline=parse_dt(submission_deadline),
+        voting_deadline=parse_dt(voting_deadline),
+        tracks="\n".join(parse_lines(tracks)), prizes="\n".join(parse_lines(prizes)),
+        custom_questions="\n".join(parse_lines(custom_questions)), is_active=True
+    )
+    for existing in db.query(Event).filter_by(is_active=True).all():
+        existing.is_active = False
+    db.add(event)
+    db.flush()
+    for line in rubric.splitlines():
+        parts = [x.strip() for x in line.split("|")]
+        if len(parts) != 3:
+            continue
+        name, weight, maximum = parts
+        try:
+            db.add(__import__("app.models", fromlist=["RubricCriterion"]).RubricCriterion(
+                event_id=event.id, name=name, weight=float(weight), max_score=float(maximum)
+            ))
+        except ValueError:
+            continue
     db.commit()
     return RedirectResponse("/organizer/event", 303)
 

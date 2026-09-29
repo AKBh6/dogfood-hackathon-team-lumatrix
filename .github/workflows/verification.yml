@@ -14,7 +14,7 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
       - run: python -m compileall app
-      - run: pytest -q
+      - run: python -m pytest -q
       - run: docker build -t dogfood-platform .
       - run: docker run -d --name dogfood-platform -p 8000:8000 dogfood-platform
       - run: |

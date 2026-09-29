@@ -21,7 +21,7 @@ class SubmissionCreate(BaseModel):
     is_draft:bool=True
 def utcnow(): return datetime.now(timezone.utc)
 def get_event_team(db,user):
-    event=db.query(Event).filter_by(slug="dogfood-2026").first()
+    event=db.query(Event).filter_by(is_active=True).order_by(Event.id.desc()).first()
     membership=db.query(TeamMember).join(Team).filter(TeamMember.user_id==user.id,Team.event_id==event.id).first() if event else None
     if not membership: raise HTTPException(400,"You do not belong to a team for the active event.")
     return membership.team,event

@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.database import engine, Base, SessionLocal
 from app.models import User, RoleEnum, Event, RubricCriterion, Team, TeamMember, Submission, JudgeAssignment
-from app.auth import hash_password
+from app.auth import hash_password, create_access_token
 
 DEMO_SUBMISSION_DEADLINE=datetime(2027,1,1,tzinfo=timezone.utc)
 DEMO_VOTING_DEADLINE=datetime(2027,1,8,tzinfo=timezone.utc)
@@ -16,6 +16,9 @@ def seed_offline_fixtures():
         judge=db.query(User).filter_by(email="judge@raptors.dev").first()
         if not judge:
             judge=User(email="judge@raptors.dev",full_name="Principal Judge",hashed_password=hash_password("judge123"),role=RoleEnum.JUDGE); db.add(judge)
+        judge_b=db.query(User).filter_by(email="judgeb@raptors.dev").first()
+        if not judge_b:
+            judge_b=User(email="judgeb@raptors.dev",full_name="Second Judge",hashed_password=hash_password("judgeb123"),role=RoleEnum.JUDGE); db.add(judge_b)
         participant=db.query(User).filter_by(email="builder@raptors.dev").first()
         if not participant:
             participant=User(email="builder@raptors.dev",full_name="Lead Builder",hashed_password=hash_password("build123"),role=RoleEnum.PARTICIPANT); db.add(participant)
@@ -36,7 +39,12 @@ def seed_offline_fixtures():
             sub=Submission(team_id=team.id,title="Dogfood Platform Core",tagline="Offline-first hackathon operations",description="Offline-first hackathon management platform with role isolation and normalized judging.",thumbnail_url="",image_gallery="",demo_video_url="",repo_url="https://github.com/AKBh6/dogfood-hackathon-team-lumatrix",live_url="http://localhost:8000/gallery",tech_tags="FastAPI\nSQLAlchemy\nSQLite",track="Web",custom_answers="Hackathon operations\nAdd richer analytics",demo_url="http://localhost:8000/gallery",is_draft=False,submitted_at=datetime.now(timezone.utc)); db.add(sub); db.flush()
         if not db.query(JudgeAssignment).filter_by(judge_id=judge.id,submission_id=sub.id).first(): db.add(JudgeAssignment(judge_id=judge.id,submission_id=sub.id))
         db.commit()
+        expires = timedelta(days=30)
         print("Seed complete.")
+        print("acceptance organizer: Cookie: access_token=" + create_access_token({"sub": str(admin.id)}, expires))
+        print("acceptance judge_a: Cookie: access_token=" + create_access_token({"sub": str(judge.id)}, expires))
+        print("acceptance judge_b: Cookie: access_token=" + create_access_token({"sub": str(judge_b.id)}, expires))
+        print("acceptance participant: Cookie: access_token=" + create_access_token({"sub": str(participant.id)}, expires))
     finally: db.close()
 
 if __name__=="__main__": seed_offline_fixtures()

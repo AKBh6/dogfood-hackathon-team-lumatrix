@@ -14,7 +14,7 @@ An offline-first, self-hostable hackathon management platform covering participa
 
 ## Current status
 
-Functional hackathon prototype. The participant, judge, organizer, results, gallery, seed, and automated verification flows are implemented.
+Functional T1/T2 hackathon prototype. T1 covers authentication, roles, configurable events, invite-link teams, full project submissions, deadline enforcement, and searchable/filterable gallery. T2 covers judge invitations, algorithmic assignment, weighted configurable rubrics, backend judge/track isolation, judging progress, cross-judge normalization, and staged CSV exports.
 
 ## Run locally
 
@@ -41,6 +41,10 @@ Public registration creates participant accounts only. Email ownership is not ve
 ```bash
 docker compose up --build
 ```
+
+## Dogfood acceptance
+
+The repository includes `.dogfood.toml` claiming T1 and T2 and mapping the portal's routes to the official acceptance shape. The official checker must be run against the seeded Docker deployment before committing its generated `acceptance-report.txt`. The checker is intentionally not claimed as passed until that run is performed.
 
 ## Verification
 

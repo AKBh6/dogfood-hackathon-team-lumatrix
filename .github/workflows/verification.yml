@@ -1,7 +1,7 @@
 name: verification
 on:
   push:
-    branches: ["dogfood-complete"]
+    branches: ["main", "dogfood-complete"]
   pull_request:
     branches: ["main"]
 jobs:

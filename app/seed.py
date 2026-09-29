@@ -1,7 +1,8 @@
 from datetime import datetime, timezone, timedelta
 from app.database import engine, Base, SessionLocal
 from app.models import User, RoleEnum, Event, RubricCriterion, Team, TeamMember, Submission, JudgeAssignment
-from app.auth import hash_password, create_access_token
+import jwt
+from app.auth import hash_password, SECRET_KEY, ALGORITHM
 
 DEMO_SUBMISSION_DEADLINE=datetime(2027,1,1,tzinfo=timezone.utc)
 DEMO_VOTING_DEADLINE=datetime(2027,1,8,tzinfo=timezone.utc)
@@ -39,12 +40,15 @@ def seed_offline_fixtures():
             sub=Submission(team_id=team.id,title="Dogfood Platform Core",tagline="Offline-first hackathon operations",description="Offline-first hackathon management platform with role isolation and normalized judging.",thumbnail_url="",image_gallery="",demo_video_url="",repo_url="https://github.com/AKBh6/dogfood-hackathon-team-lumatrix",live_url="http://localhost:8000/gallery",tech_tags="FastAPI\nSQLAlchemy\nSQLite",track="Web",custom_answers="Hackathon operations\nAdd richer analytics",demo_url="http://localhost:8000/gallery",is_draft=False,submitted_at=datetime.now(timezone.utc)); db.add(sub); db.flush()
         if not db.query(JudgeAssignment).filter_by(judge_id=judge.id,submission_id=sub.id).first(): db.add(JudgeAssignment(judge_id=judge.id,submission_id=sub.id))
         db.commit()
-        expires = timedelta(days=30)
+        acceptance_exp = 1793281195
+        def acceptance_cookie(user):
+            token = jwt.encode({"sub": str(user.id), "exp": acceptance_exp}, SECRET_KEY, algorithm=ALGORITHM)
+            return "Cookie: access_token=" + token
         print("Seed complete.")
-        print("acceptance organizer: Cookie: access_token=" + create_access_token({"sub": str(admin.id)}, expires))
-        print("acceptance judge_a: Cookie: access_token=" + create_access_token({"sub": str(judge.id)}, expires))
-        print("acceptance judge_b: Cookie: access_token=" + create_access_token({"sub": str(judge_b.id)}, expires))
-        print("acceptance participant: Cookie: access_token=" + create_access_token({"sub": str(participant.id)}, expires))
+        print("acceptance organizer: " + acceptance_cookie(admin))
+        print("acceptance judge_a: " + acceptance_cookie(judge))
+        print("acceptance judge_b: " + acceptance_cookie(judge_b))
+        print("acceptance participant: " + acceptance_cookie(participant))
     finally: db.close()
 
 if __name__=="__main__": seed_offline_fixtures()

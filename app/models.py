@@ -98,6 +98,14 @@ class JudgeInvitation(Base):
     invited_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     accepted_at = Column(DateTime, nullable=True)
 
+class JudgeTrack(Base):
+    __tablename__ = "judge_tracks"
+    id = Column(Integer, primary_key=True, index=True)
+    judge_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+    track = Column(String(100), nullable=False)
+    __table_args__ = (UniqueConstraint("judge_id", "event_id", "track", name="uq_judge_event_track"),)
+
 class JudgeAssignment(Base):
     __tablename__ = "judge_assignments"
     id = Column(Integer, primary_key=True, index=True)

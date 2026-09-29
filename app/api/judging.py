@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Score, Submission, RubricCriterion, User, RoleEnum, JudgeAssignment, Team
+from app.models import Score, Submission, RubricCriterion, User, RoleEnum, JudgeAssignment, JudgeTrack, Team
 from app.auth import require_roles
 from app.algorithms.normalization import compute_z_score_normalization
 
@@ -17,8 +17,13 @@ class ScoreInput(BaseModel):
     feedback: str | None = None
 
 def assert_assigned(db, judge_id, submission_id):
-    if not db.query(JudgeAssignment).filter_by(judge_id=judge_id, submission_id=submission_id).first():
+    assignment = db.query(JudgeAssignment).filter_by(judge_id=judge_id, submission_id=submission_id).first()
+    if not assignment:
         raise HTTPException(403, "This submission is not assigned to you.")
+    submission = assignment.submission
+    scopes = db.query(JudgeTrack).filter_by(judge_id=judge_id, event_id=submission.team.event_id).all()
+    if scopes and (submission.track or "General") not in {x.track for x in scopes}:
+        raise HTTPException(403, "You are not assigned to this submission's track.")
 
 @router.get("/scores")
 def get_scores(judge: int | None = None, db: Session = Depends(get_db),

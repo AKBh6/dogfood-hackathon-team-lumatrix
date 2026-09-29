@@ -778,6 +778,57 @@ def api_create_event(title: str = Form(...), slug: str = Form(...),
     db.commit()
     return {"id": event.id, "slug": event.slug}
 
+@app.post("/api/judges/invitations")
+def api_invite_judges(emails: str = Form(...), tracks: str = Form(""),
+                      db: Session = Depends(get_db),
+                      user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    event = event_for(db)
+    selected = parse_lines(tracks)
+    created = []
+    for email in re.split(r"[,\\n]+", emails):
+        email = email.strip().lower()
+        if not email or db.query(User).filter_by(email=email).first():
+            continue
+        token = secrets.token_urlsafe(24)
+        db.add(JudgeInvitation(event_id=event.id, email=email, tracks="\\n".join(selected), token=token))
+        created.append({"email": email, "path": "/judge/invite/" + token})
+    audit(db, event.id, user.id, "judge_invitations_created", "event", event.id, details=f"count={len(created)}")
+    db.commit()
+    return {"invitations": created}
+
+@app.post("/api/judges/assign")
+def api_assign_judges(db: Session = Depends(get_db),
+                      user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    event = event_for(db)
+    judges = db.query(User).filter_by(role=RoleEnum.JUDGE).order_by(User.id).all()
+    submissions = db.query(Submission).join(Team).filter(Team.event_id == event.id, Submission.is_draft == False).order_by(Submission.id).all()
+    created = 0
+    for i, sub in enumerate(submissions):
+        eligible = []
+        for judge in judges:
+            scopes = db.query(JudgeTrack).filter_by(judge_id=judge.id, event_id=event.id).all()
+            if not scopes or (sub.track or "General") in {x.track for x in scopes}:
+                eligible.append(judge)
+        if eligible:
+            judge = eligible[i % len(eligible)]
+            if not db.query(JudgeAssignment).filter_by(judge_id=judge.id, submission_id=sub.id).first():
+                db.add(JudgeAssignment(judge_id=judge.id, submission_id=sub.id))
+                created += 1
+    audit(db, event.id, user.id, "judge_assignments_created", "event", event.id, details=f"count={created}")
+    db.commit()
+    return {"created": created}
+
+@app.get("/api/certificates/{submission_id}")
+def api_certificate(submission_id: int, db: Session = Depends(get_db),
+                    user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    sub = db.query(Submission).filter_by(id=submission_id, is_draft=False).first()
+    if not sub:
+        raise HTTPException(404, "Submission not found.")
+    from app.api.judging import ranking_rows
+    row = next((r for r in ranking_rows(db) if r["submission_id"] == submission_id), None)
+    return {"submission": sub.title, "team": sub.team.name, "normalized_score": row["normalized_score"] if row else None,
+            "certificate_url": f"/organizer/certificate/{submission_id}"}
+
 @app.get("/organizer/certificate/{submission_id}", response_class=HTMLResponse)
 def certificate(submission_id: int, request: Request, db: Session = Depends(get_db),
                 user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):

@@ -22,7 +22,7 @@ def seed_offline_fixtures():
         db.flush()
         event=db.query(Event).filter_by(slug="dogfood-2026").first()
         if not event:
-            event=Event(slug="dogfood-2026",title="Dogfood 2026 | 72-Hour Hackathon",submission_deadline=DEMO_SUBMISSION_DEADLINE,voting_deadline=DEMO_VOTING_DEADLINE,is_active=True); db.add(event); db.flush()
+            event=Event(slug="dogfood-2026",title="Dogfood 2026 | 72-Hour Hackathon",submission_deadline=DEMO_SUBMISSION_DEADLINE,voting_deadline=DEMO_VOTING_DEADLINE,start_at=datetime(2026,12,29,tzinfo=timezone.utc),end_at=datetime(2027,1,1,tzinfo=timezone.utc),tracks="General\nAI\nWeb",prizes="1st Place\n2nd Place\nBest Technical Implementation",custom_questions="What problem does this solve?\nWhat would you improve next?",is_active=True); db.add(event); db.flush()
         criteria=[("Tier Completion & Correctness",.40),("Judging Integrity",.25),("Adoptability & Operability",.20),("Code Quality & Innovation",.15)]
         for name,weight in criteria:
             if not db.query(RubricCriterion).filter_by(event_id=event.id,name=name).first(): db.add(RubricCriterion(event_id=event.id,name=name,weight=weight,max_score=10))
@@ -33,7 +33,7 @@ def seed_offline_fixtures():
         if not db.query(TeamMember).filter_by(user_id=participant.id,team_id=team.id).first(): db.add(TeamMember(user_id=participant.id,team_id=team.id,is_leader=True))
         sub=db.query(Submission).filter_by(team_id=team.id).first()
         if not sub:
-            sub=Submission(team_id=team.id,title="Dogfood Platform Core",description="Offline-first hackathon management platform with role isolation and normalized judging.",repo_url="https://github.com/AKBh6/dogfood-hackathon-team-lumatrix",demo_url="http://localhost:8000/gallery",is_draft=False,submitted_at=datetime.now(timezone.utc)); db.add(sub); db.flush()
+            sub=Submission(team_id=team.id,title="Dogfood Platform Core",tagline="Offline-first hackathon operations",description="Offline-first hackathon management platform with role isolation and normalized judging.",thumbnail_url="",image_gallery="",demo_video_url="",repo_url="https://github.com/AKBh6/dogfood-hackathon-team-lumatrix",live_url="http://localhost:8000/gallery",tech_tags="FastAPI\nSQLAlchemy\nSQLite",track="Web",custom_answers="Hackathon operations\nAdd richer analytics",demo_url="http://localhost:8000/gallery",is_draft=False,submitted_at=datetime.now(timezone.utc)); db.add(sub); db.flush()
         if not db.query(JudgeAssignment).filter_by(judge_id=judge.id,submission_id=sub.id).first(): db.add(JudgeAssignment(judge_id=judge.id,submission_id=sub.id))
         db.commit()
         print("Seed complete.")

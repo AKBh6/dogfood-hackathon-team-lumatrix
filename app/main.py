@@ -717,6 +717,146 @@ def embed_gallery(request: Request, db: Session = Depends(get_db)):
     submissions = db.query(Submission).join(Team).filter(Submission.is_draft == False).order_by(Submission.submitted_at.desc()).all()
     return templates.TemplateResponse(request=request, name="embed_gallery.html", context={"submissions": submissions})
 
+@app.get("/api/events")
+def api_events(db: Session = Depends(get_db)):
+    return [{"id": e.id, "slug": e.slug, "title": e.title, "start_at": e.start_at,
+             "end_at": e.end_at, "submission_deadline": e.submission_deadline,
+             "voting_deadline": e.voting_deadline, "tracks": parse_lines(e.tracks),
+             "prizes": parse_lines(e.prizes), "voting_access": e.voting_access}
+            for e in db.query(Event).order_by(Event.id.desc()).all()]
+
+@app.get("/api/events/{event_id}/submissions")
+def api_event_submissions(event_id: int, db: Session = Depends(get_db)):
+    rows = db.query(Submission).join(Team).filter(Team.event_id == event_id).all()
+    return [{"id": s.id, "team": s.team.name, "title": s.title, "track": s.track,
+             "is_draft": s.is_draft, "submitted_at": s.submitted_at} for s in rows]
+
+@app.get("/api/events/{event_id}/votes")
+def api_event_vote_totals(event_id: int, db: Session = Depends(get_db),
+                          user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    event = db.query(Event).filter_by(id=event_id).first()
+    if not event:
+        raise HTTPException(404, "Event not found.")
+    if now() <= event.voting_deadline:
+        raise HTTPException(403, "Vote totals remain hidden during voting.")
+    rows = db.query(Vote.submission_id).filter_by(event_id=event_id).all()
+    totals = {}
+    for (sid,) in rows:
+        totals[sid] = totals.get(sid, 0) + 1
+    return totals
+
+@app.post("/api/events")
+def api_create_event(title: str = Form(...), slug: str = Form(...),
+                     submission_deadline: str = Form(...), voting_deadline: str = Form(...),
+                     start_at: str = Form(""), end_at: str = Form(""),
+                     tracks: str = Form(""), prizes: str = Form(""),
+                     voting_access: str = Form("open"),
+                     db: Session = Depends(get_db),
+                     user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    slug = re.sub(r"[^a-z0-9-]+", "-", slug.lower().strip()).strip("-")
+    if not slug or db.query(Event).filter_by(slug=slug).first():
+        raise HTTPException(400, "Event slug is missing or already exists.")
+    if voting_access not in {"open", "email-gated", "authenticated"}:
+        raise HTTPException(400, "Invalid voting access mode.")
+    def dt(v):
+        return datetime.fromisoformat(v).replace(tzinfo=timezone.utc)
+    event = Event(slug=slug, title=title.strip(), start_at=dt(start_at) if start_at else None,
+                  end_at=dt(end_at) if end_at else None, submission_deadline=dt(submission_deadline),
+                  voting_deadline=dt(voting_deadline), tracks="\\n".join(parse_lines(tracks)),
+                  prizes="\\n".join(parse_lines(prizes)), voting_access=voting_access, is_active=True)
+    for other in db.query(Event).filter_by(is_active=True).all():
+        other.is_active = False
+    db.add(event)
+    db.commit()
+    audit(db, event.id, user.id, "event_created", "event", event.id)
+    db.commit()
+    return {"id": event.id, "slug": event.slug}
+
+@app.get("/organizer/certificate/{submission_id}", response_class=HTMLResponse)
+def certificate(submission_id: int, request: Request, db: Session = Depends(get_db),
+                user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    sub = db.query(Submission).filter_by(id=submission_id, is_draft=False).first()
+    if not sub:
+        raise HTTPException(404, "Submission not found.")
+    from app.api.judging import ranking_rows
+    row = next((r for r in ranking_rows(db) if r["submission_id"] == submission_id), None)
+    return render(request, "certificate.html", {"request": request, "submission": sub, "row": row})
+
+@app.post("/organizer/generate-records")
+def generate_judge_records(db: Session = Depends(get_db),
+                           user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    event = event_for(db)
+    judges = db.query(User).filter_by(role=RoleEnum.JUDGE).all()
+    generated = 0
+    for judge in judges:
+        scores = db.query(Score).filter_by(judge_id=judge.id).all()
+        payload = json.dumps({
+            "event_id": event.id, "event": event.title, "judge_id": judge.id,
+            "judge": judge.full_name, "assignments": len(db.query(JudgeAssignment).filter_by(judge_id=judge.id).all()),
+            "scores": len(scores), "generated_at": now().isoformat()
+        }, sort_keys=True)
+        signature = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        existing = db.query(JudgeParticipationRecord).filter_by(judge_id=judge.id, event_id=event.id).first()
+        if existing:
+            existing.payload, existing.signature = payload, signature
+        else:
+            db.add(JudgeParticipationRecord(judge_id=judge.id, event_id=event.id, payload=payload, signature=signature))
+        generated += 1
+    db.commit()
+    return {"generated": generated}
+
+@app.get("/public/judge-record/{record_id}")
+def public_judge_record(record_id: int, db: Session = Depends(get_db)):
+    record = db.query(JudgeParticipationRecord).filter_by(id=record_id).first()
+    if not record:
+        raise HTTPException(404, "Record not found.")
+    valid = hmac.compare_digest(record.signature, hmac.new(SECRET_KEY.encode(), record.payload.encode(), hashlib.sha256).hexdigest())
+    return {"record": json.loads(record.payload), "signature": record.signature, "valid": valid}
+
+@app.get("/organizer/bulk/submissions.csv")
+def bulk_export_submissions(db: Session = Depends(get_db),
+                            user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    event = event_for(db)
+    rows = db.query(Submission).join(Team).filter(Team.event_id == event.id).all()
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["team","title","tagline","description","repo_url","live_url","track","tech_tags","is_draft"])
+    writer.writeheader()
+    for s in rows:
+        writer.writerow({"team":s.team.name,"title":s.title,"tagline":s.tagline or "",
+                         "description":s.description,"repo_url":s.repo_url,"live_url":s.live_url or "",
+                         "track":s.track or "","tech_tags":s.tech_tags.replace("\\n", ", "),"is_draft":s.is_draft})
+    return Response(output.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition":"attachment; filename=bulk-submissions.csv"})
+
+@app.post("/api/bulk/submissions/import")
+def bulk_import_submissions(csv_text: str = Form(...), db: Session = Depends(get_db),
+                            user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    event = event_for(db)
+    reader = csv.DictReader(io.StringIO(csv_text))
+    imported = 0
+    for row in reader:
+        team = db.query(Team).filter_by(event_id=event.id, name=(row.get("team") or "").strip()).first()
+        if not team:
+            continue
+        sub = db.query(Submission).filter_by(team_id=team.id).first()
+        if not sub:
+            sub = Submission(team_id=team.id, title="", description="", repo_url="")
+            db.add(sub)
+        sub.title = (row.get("title") or "").strip()
+        sub.tagline = (row.get("tagline") or "").strip() or None
+        sub.description = (row.get("description") or "").strip()
+        sub.repo_url = (row.get("repo_url") or "").strip()
+        sub.live_url = (row.get("live_url") or "").strip() or None
+        sub.track = (row.get("track") or "").strip() or None
+        sub.tech_tags = (row.get("tech_tags") or "").strip().replace(", ", "\\n")
+        sub.is_draft = (row.get("is_draft") or "").lower() == "true"
+        if not sub.is_draft and not sub.submitted_at:
+            sub.submitted_at = now()
+        imported += 1
+    audit(db, event.id, user.id, "bulk_import", "event", event.id, details=f"rows={imported}")
+    db.commit()
+    return {"imported": imported}
+
 @app.get("/organizer/audit", response_class=HTMLResponse)
 def organizer_audit(request: Request, db: Session = Depends(get_db),
                     user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):

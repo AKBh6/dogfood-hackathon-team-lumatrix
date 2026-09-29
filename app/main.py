@@ -9,6 +9,7 @@ import hmac
 import time
 import urllib.parse
 from app.auth import SECRET_KEY
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from fastapi import FastAPI, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -30,6 +31,8 @@ app = FastAPI(title="Dogfood Platform")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 VOTE_RATE_BUCKET = {}
+SIGNING_PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(hashlib.sha256(SECRET_KEY.encode()).digest())
+SIGNING_PUBLIC_KEY = SIGNING_PRIVATE_KEY.public_key()
 
 
 def render(request, name, context, status_code=200):
@@ -798,7 +801,7 @@ def generate_judge_records(db: Session = Depends(get_db),
             "judge": judge.full_name, "assignments": len(db.query(JudgeAssignment).filter_by(judge_id=judge.id).all()),
             "scores": len(scores), "generated_at": now().isoformat()
         }, sort_keys=True)
-        signature = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        signature = __import__("base64").b64encode(SIGNING_PRIVATE_KEY.sign(payload.encode())).decode()
         existing = db.query(JudgeParticipationRecord).filter_by(judge_id=judge.id, event_id=event.id).first()
         if existing:
             existing.payload, existing.signature = payload, signature
@@ -813,8 +816,15 @@ def public_judge_record(record_id: int, db: Session = Depends(get_db)):
     record = db.query(JudgeParticipationRecord).filter_by(id=record_id).first()
     if not record:
         raise HTTPException(404, "Record not found.")
-    valid = hmac.compare_digest(record.signature, hmac.new(SECRET_KEY.encode(), record.payload.encode(), hashlib.sha256).hexdigest())
-    return {"record": json.loads(record.payload), "signature": record.signature, "valid": valid}
+    try:
+        SIGNING_PUBLIC_KEY.verify(__import__("base64").b64decode(record.signature), record.payload.encode())
+        valid = True
+    except Exception:
+        valid = False
+    return {"record": json.loads(record.payload), "signature": record.signature,
+            "algorithm": "Ed25519",
+            "public_key": __import__("base64").b64encode(SIGNING_PUBLIC_KEY.public_bytes_raw()).decode(),
+            "valid": valid}
 
 @app.get("/organizer/bulk/submissions.csv")
 def bulk_export_submissions(db: Session = Depends(get_db),

@@ -4,9 +4,13 @@ import io
 import json
 import re
 import secrets
+import hashlib
+import hmac
+import time
+import urllib.parse
 
 from fastapi import FastAPI, Depends, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -14,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db, engine, Base
 from app.models import (
     User, RoleEnum, Event, Team, TeamMember, Submission,
-    JudgeAssignment, JudgeInvitation, JudgeTrack, Score
+    JudgeAssignment, JudgeInvitation, JudgeTrack, Score, Vote, GalleryComment, AuditLog, JudgeParticipationRecord
 )
 from app.auth import hash_password, verify_password, create_access_token, require_roles, get_current_user
 from app.api import judging
@@ -166,6 +170,133 @@ def accept_judge_invite(request: Request, token: str, full_name: str = Form(...)
     db.commit()
     return RedirectResponse("/login?registered=1", 303)
 
+
+def hash_value(value):
+    return hashlib.sha256(value.encode()).hexdigest()
+
+def voting_event(db):
+    event = event_for(db)
+    if not event:
+        raise HTTPException(404, "No active event.")
+    return event
+
+def voting_key(request, user, email=""):
+    if user:
+        return f"user:{user.id}"
+    if email.strip():
+        return f"email:{email.strip().lower()}"
+    cookie = request.cookies.get("voter_key")
+    if cookie:
+        return f"cookie:{cookie}"
+    return f"cookie:{secrets.token_urlsafe(18)}"
+
+def audit(db, event_id, user_id, action, target_type=None, target_id=None, request=None, details=""):
+    db.add(AuditLog(
+        event_id=event_id, user_id=user_id, action=action,
+        target_type=target_type, target_id=target_id,
+        ip_hash=hash_value(request.client.host if request and request.client else "") if request else None,
+        details=details
+    ))
+
+@app.get("/vote", response_class=HTMLResponse)
+def voting_ballot(request: Request, db: Session = Depends(get_db), user: User | None = None):
+    event = voting_event(db)
+    if now() > event.voting_deadline:
+        raise HTTPException(403, "Community voting is closed.")
+    if event.voting_start_at and now() < event.voting_start_at:
+        raise HTTPException(403, "Community voting has not opened yet.")
+    if event.voting_access == "authenticated":
+        try:
+            user = get_current_user(request, db)
+        except HTTPException:
+            raise HTTPException(401, "Authentication required for voting.")
+    submissions = db.query(Submission).join(Team).filter(
+        Team.event_id == event.id, Submission.is_draft == False
+    ).all()
+    secrets.SystemRandom().shuffle(submissions)
+    response = render(request, "vote.html", {
+        "request": request, "event": event, "submissions": submissions,
+        "voting_access": event.voting_access
+    })
+    if event.voting_access == "open" and not request.cookies.get("voter_key"):
+        response.set_cookie("voter_key", secrets.token_urlsafe(18), httponly=True, samesite="lax", max_age=86400*30)
+    return response
+
+@app.post("/api/voting/vote")
+def cast_vote(request: Request, submission_id: int = Form(...), email: str = Form(""),
+              db: Session = Depends(get_db)):
+    event = voting_event(db)
+    current_user = None
+    if event.voting_access == "authenticated":
+        current_user = get_current_user(request, db)
+        voter = voting_key(request, current_user)
+    elif event.voting_access == "email-gated":
+        if not email.strip() or not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", email.strip()):
+            raise HTTPException(400, "A valid email address is required.")
+        voter = voting_key(request, None, email)
+    else:
+        voter = voting_key(request, None)
+    current = now()
+    if event.voting_start_at and current < event.voting_start_at:
+        raise HTTPException(403, "Community voting has not opened yet.")
+    if current > event.voting_deadline:
+        raise HTTPException(403, "Community voting is closed.")
+    sub = db.query(Submission).join(Team).filter(
+        Submission.id == submission_id, Team.event_id == event.id, Submission.is_draft == False
+    ).first()
+    if not sub:
+        raise HTTPException(404, "Project not found.")
+    if db.query(Vote).filter_by(event_id=event.id, voter_key=voter).first():
+        audit(db, event.id, current_user.id if current_user else None, "duplicate_vote_blocked", "submission", submission_id, request)
+        db.commit()
+        raise HTTPException(409, "A vote has already been recorded for this voter.")
+    window_key = hash_value(voter + ":" + str(int(time.time() // 60)))
+    recent = db.query(AuditLog).filter_by(event_id=event.id, action="vote_rate_limited", ip_hash=hash_value(request.client.host if request.client else "")).count()
+    if recent >= 30:
+        raise HTTPException(429, "Voting rate limit reached.")
+    db.add(Vote(event_id=event.id, submission_id=submission_id,
+                user_id=current_user.id if current_user else None, voter_key=voter,
+                ip_hash=hash_value(request.client.host if request.client else "")))
+    audit(db, event.id, current_user.id if current_user else None, "vote_cast", "submission", submission_id, request, "voter=" + hash_value(voter))
+    db.commit()
+    return {"message": "Vote recorded."}
+
+@app.post("/api/gallery/{submission_id}/comments")
+def add_comment(request: Request, submission_id: int, body: str = Form(...),
+                author_name: str = Form(""), db: Session = Depends(get_db)):
+    sub = db.query(Submission).join(Team).filter(Submission.id == submission_id, Submission.is_draft == False).first()
+    if not sub:
+        raise HTTPException(404, "Project not found.")
+    current_user = None
+    try:
+        current_user = get_current_user(request, db)
+    except HTTPException:
+        pass
+    name = current_user.full_name if current_user else author_name.strip()
+    if not name or not body.strip():
+        raise HTTPException(400, "Name and comment are required.")
+    if len(body.strip()) > 2000:
+        raise HTTPException(422, "Comment is too long.")
+    db.add(GalleryComment(submission_id=submission_id, user_id=current_user.id if current_user else None,
+                           author_name=name, body=body.strip()))
+    audit(db, sub.team.event_id, current_user.id if current_user else None, "comment_added", "submission", submission_id, request)
+    db.commit()
+    return RedirectResponse("/gallery", 303)
+
+@app.get("/api/gallery/{submission_id}/comments")
+def get_comments(submission_id: int, db: Session = Depends(get_db)):
+    rows = db.query(GalleryComment).filter_by(submission_id=submission_id, is_hidden=False).order_by(GalleryComment.created_at.asc()).all()
+    return [{"author": r.author_name, "body": r.body, "created_at": r.created_at} for r in rows]
+
+@app.get("/public/results", response_class=HTMLResponse)
+def public_results(request: Request, db: Session = Depends(get_db)):
+    event = event_for(db)
+    if not event:
+        raise HTTPException(404, "No active event.")
+    if now() <= event.voting_deadline:
+        raise HTTPException(403, "Community results are hidden during voting.")
+    from app.api.judging import ranking_rows
+    return render(request, "public_results.html", {"request": request, "rows": ranking_rows(db)})
 
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery(request: Request, search: str = "", track: str = "", tag: str = "", db: Session = Depends(get_db)):
@@ -572,6 +703,18 @@ def assign_judge_track(judge_id: int = Form(...), track: str = Form(...),
         db.commit()
     return RedirectResponse("/organizer/event", 303)
 
+
+@app.get("/embed/gallery", response_class=HTMLResponse)
+def embed_gallery(db: Session = Depends(get_db)):
+    submissions = db.query(Submission).join(Team).filter(Submission.is_draft == False).order_by(Submission.submitted_at.desc()).all()
+    return templates.TemplateResponse(request=Request, name="embed_gallery.html", context={"submissions": submissions})
+
+@app.get("/organizer/audit", response_class=HTMLResponse)
+def organizer_audit(request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require_roles(RoleEnum.ORGANIZER, RoleEnum.ADMIN))):
+    event = event_for(db)
+    rows = db.query(AuditLog).filter_by(event_id=event.id).order_by(AuditLog.created_at.desc()).limit(500).all()
+    return render(request, "organizer/audit.html", {"request": request, "user": user, "rows": rows})
 
 @app.get("/organizer/results", response_class=HTMLResponse)
 def organizer_results(request: Request, db: Session = Depends(get_db),

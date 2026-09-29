@@ -1,18 +1,1 @@
-{% extends "base.html" %}
-
-{% block title %}Judge Dashboard{% endblock %}
-
-{% block nav %}
-<a href="/logout">Logout</a>
-{% endblock %}
-
-{% block content %}
-<div class="dashboard-container">
-    <h2>Judge Evaluation Portal</h2>
-    <p>Welcome back, <strong>{{ user.full_name }}</strong></p>
-    <div class="card">
-        <h3>Assigned Submissions</h3>
-        <p>Review submitted projects and enter rubric scores.</p>
-    </div>
-</div>
-{% endblock %}
+{% extends "base.html" %}{% block title %}Judge Dashboard{% endblock %}{% block nav %}<a href="/judge/assignments">Assignments</a><a href="/logout">Logout</a>{% endblock %}{% block content %}<h1>Judge Dashboard</h1><p class="muted">{{user.full_name}} · {{assignments|length}} assigned · {{done|length}} touched</p><div class="card"><table><tr><th>Project</th><th>Team</th><th>Status</th><th></th></tr>{% for a in assignments %}<tr><td>{{a.submission.title}}</td><td>{{a.submission.team.name}}</td><td>{{"SCORED" if a.submission_id in done else "PENDING"}}</td><td><a class="btn small" href="/judge/evaluate/{{a.submission_id}}">Evaluate</a></td></tr>{% endfor %}</table></div>{% endblock %}

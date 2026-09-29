@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 class RoleEnum(str, enum.Enum):
+    VISITOR = "VISITOR"
     PARTICIPANT = "PARTICIPANT"
     JUDGE = "JUDGE"
     ORGANIZER = "ORGANIZER"

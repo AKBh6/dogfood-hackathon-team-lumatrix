@@ -1,51 +1,105 @@
 # Data Model
 
-The implementation uses SQLAlchemy models in `app/models.py`. The following is the current relational model.
+The relational schema is implemented in `app/models.py`. SQLAlchemy is the source of truth.
 
-## User
+## Core entities
 
-Stores `id`, unique `email`, `full_name`, bcrypt `hashed_password`, `role`, and `created_at`.
+### User
 
-Roles are PARTICIPANT, JUDGE, ORGANIZER, and ADMIN.
+Stores email, full name, bcrypt password hash, role, and account creation time.
 
-## Event
+Roles are PARTICIPANT, JUDGE, ORGANIZER, ADMIN, and VISITOR.
 
-Stores the event slug, title, submission deadline, voting deadline, and active state. An event owns its rubric criteria and teams.
+### Event
 
-## Team
+Stores the event slug, title, submission deadline, voting deadline, optional start/end times, tracks, prizes, custom questions, voting access mode, voting start time, and active state.
 
-Stores a team name, unique invite code, and event relationship. A team can have up to four members in the current application logic and can have one submission.
+### Team
 
-## TeamMember
+Belongs to an event and stores the team name and unique invite code. Current application logic limits a team to four members and allows one submission per team.
 
-Links users to teams and records whether the member is the team leader.
+### TeamMember
 
-## Submission
+Joins users to teams and records whether each member is the team leader. A user/team pair is unique.
 
-Stores the team, project title, description, repository URL, optional demo URL, draft/final state, and submission timestamp. A team can have one submission. A final submission is locked against editing.
+### Submission
 
-## RubricCriterion
+Belongs to one team and stores title, description, tagline, thumbnail, image gallery, demo video, live URL, technology tags, track, custom answers, repository URL, demo URL, draft/final state, and submission timestamp.
 
-Stores the event-specific criterion name, weight, and maximum score.
+A team can have one submission. Final submissions are locked against further edits.
 
-## JudgeAssignment
+## Judging entities
 
-Links a judge to a submission. A unique constraint prevents duplicate judge/submission assignments.
+### RubricCriterion
 
-## Score
+Belongs to an event and stores the criterion name, weight, and maximum score.
 
-Stores a judge's score for one criterion of one submission, optional feedback, and creation time. A unique constraint prevents duplicate criterion scores for the same judge and submission.
+### JudgeInvitation
+
+Stores an event-specific judge invitation email, track scope, invitation token, invitation timestamp, and optional acceptance timestamp.
+
+### JudgeTrack
+
+Associates a judge with an event and track. The combination of judge, event, and track is unique.
+
+### JudgeAssignment
+
+Associates a judge with a submission. The judge/submission pair is unique.
+
+### Score
+
+Stores a judge's score for one rubric criterion on one submission, optional feedback, and creation time. The combination of submission, judge, and criterion is unique.
+
+### JudgeParticipationRecord
+
+Stores an event/judge payload and an Ed25519 signature for publicly verifiable participation records.
+
+## Community and audit entities
+
+### Vote
+
+Stores the event, submission, optional authenticated user, voter key, optional hashed IP address, and creation time.
+
+The event/voter-key pair is unique, providing database-backed duplicate-vote protection.
+
+### GalleryComment
+
+Stores a submission comment, optional authenticated user, display author name, body, creation time, and hidden-state flag.
+
+### AuditLog
+
+Stores the event and user context when available, action, target type/id, optional hashed IP, details, and timestamp. It is used for organizer auditability of important actions such as votes, blocked duplicates, rate limits, comments, assignments, invitations, imports, and event operations.
 
 ## Relationships
 
-`User -> TeamMember -> Team`
+```
+User
+ ├── TeamMember ──> Team ──> Event
+ │                    |
+ │                    └──> Submission
+ |
+ ├── JudgeAssignment ──> Submission
+ ├── Score ──> Submission
+ └── Vote
 
-`Event -> Team -> Submission`
+Event
+ ├── Team
+ ├── RubricCriterion
+ ├── Vote
+ ├── JudgeInvitation
+ ├── JudgeTrack
+ ├── JudgeParticipationRecord
+ └── AuditLog
 
-`Event -> RubricCriterion`
+Submission
+ ├── JudgeAssignment
+ ├── Score
+ ├── Vote
+ └── GalleryComment
+```
 
-`Submission -> JudgeAssignment -> User`
+Foreign keys connect the related records, while uniqueness constraints enforce one membership per user/team, one submission per team, one judge/submission assignment, one score per judge/criterion/submission, one judge/event/track association, and one voter key per event.
 
-`Submission -> Score -> User`
+## Persistence notes
 
-The source of truth for the schema is `app/models.py`, not this document.
+SQLite is the default local database. The application creates tables from the current SQLAlchemy metadata, but there is no migration framework. When the model schema changes, a fresh development/demo database should be created by removing the old SQLite file and running the seed script again.

@@ -1,18 +1,1 @@
-{% extends "base.html" %}
-
-{% block title %}Participant Dashboard{% endblock %}
-
-{% block nav %}
-<a href="/logout">Logout</a>
-{% endblock %}
-
-{% block content %}
-<div class="dashboard-container">
-    <h2>Builder Portal</h2>
-    <p>Welcome back, <strong>{{ user.full_name }}</strong> ({{ user.role.value }})</p>
-    <div class="card">
-        <h3>Team Status</h3>
-        <p>Manage your team submission, demo links, and repository access here.</p>
-    </div>
-</div>
-{% endblock %}
+{% extends "base.html" %}{% block title %}Participant Dashboard{% endblock %}{% block nav %}<a href="/participant/team">Team</a><a href="/participant/submission">Submission</a><a href="/logout">Logout</a>{% endblock %}{% block content %}<h1>Builder Dashboard</h1><p class="muted">Welcome, {{user.full_name}}.</p><div class="grid three"><div class="stat-card"><b>Team</b><strong>{{team.name if team else "Not formed"}}</strong></div><div class="stat-card"><b>Members</b><strong>{{team.members|length if team else 0}} / 4</strong></div><div class="stat-card"><b>Submission</b><strong>{{"Final" if team and team.submission and not team.submission.is_draft else "Draft" if team and team.submission else "Not started"}}</strong></div></div>{% endblock %}

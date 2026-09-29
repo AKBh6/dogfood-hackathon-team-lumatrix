@@ -85,7 +85,7 @@ def participant_team(request:Request,db:Session=Depends(get_db),user:User=Depend
     m=get_participant_membership(db,user); return render(request,"participant/team.html",{"request":request,"user":user,"team":m.team if m else None})
 @app.get("/participant/submission",response_class=HTMLResponse)
 def participant_submission(request:Request,db:Session=Depends(get_db),user:User=Depends(require_roles(RoleEnum.PARTICIPANT))):
-    m=participant_team(db,user); team=m.team if m else None; sub=team.submission if team else None; event=team.event if team else event_for(db)
+    m=get_participant_membership(db,user); team=m.team if m else None; sub=team.submission if team else None; event=team.event if team else event_for(db)
     return render(request,"participant/submission.html",{"request":request,"user":user,"team":team,"submission":sub,"event":event})
 @app.get("/judge/dashboard",response_class=HTMLResponse)
 def judge_dashboard(request:Request,db:Session=Depends(get_db),user:User=Depends(require_roles(RoleEnum.JUDGE))):

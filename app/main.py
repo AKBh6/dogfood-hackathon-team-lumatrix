@@ -66,7 +66,7 @@ def join_team(invite_code:str=Form(...),db:Session=Depends(get_db),user:User=Dep
     db.add(TeamMember(user_id=user.id,team_id=team.id,is_leader=False)); db.commit(); return RedirectResponse("/participant/team",303)
 @app.get("/api/teams/me")
 def my_team(db:Session=Depends(get_db),user:User=Depends(get_current_user)):
-    m=participant_team(db,user)
+    m=get_participant_membership(db,user)
     if not m:return {"team":None}
     return {"team":{"id":m.team.id,"name":m.team.name,"invite_code":m.team.invite_code,"leader":next(x.user.full_name for x in m.team.members if x.is_leader),"members":[x.user.full_name for x in m.team.members]}}
 @app.post("/api/submissions/save")
@@ -78,9 +78,11 @@ def final_submission(title:str=Form(...),description:str=Form(...),repo_url:str=
     from app.api.submissions import SubmissionCreate,save_submission as save
     save(SubmissionCreate(title=title,description=description,repo_url=repo_url,demo_url=demo_url or None,is_draft=False),db,user); return RedirectResponse("/participant/submission",303)
 @app.get("/participant/dashboard",response_class=HTMLResponse)
-def participant_dashboard(request:Request,db:Session=Depends(get_db),user:User=Depends(require_roles(RoleEnum.PARTICIPANT))): return render(request,"participant/dashboard.html",{"request":request,"user":user,"team":participant_team(db,user).team if participant_team(db,user) else None})
+def participant_dashboard(request:Request,db:Session=Depends(get_db),user:User=Depends(require_roles(RoleEnum.PARTICIPANT))):
+    m=get_participant_membership(db,user); return render(request,"participant/dashboard.html",{"request":request,"user":user,"team":m.team if m else None})
 @app.get("/participant/team",response_class=HTMLResponse)
-def participant_team(request:Request,db:Session=Depends(get_db),user:User=Depends(require_roles(RoleEnum.PARTICIPANT))): return render(request,"participant/team.html",{"request":request,"user":user,"team":participant_team(db,user).team if participant_team(db,user) else None})
+def participant_team(request:Request,db:Session=Depends(get_db),user:User=Depends(require_roles(RoleEnum.PARTICIPANT))):
+    m=get_participant_membership(db,user); return render(request,"participant/team.html",{"request":request,"user":user,"team":m.team if m else None})
 @app.get("/participant/submission",response_class=HTMLResponse)
 def participant_submission(request:Request,db:Session=Depends(get_db),user:User=Depends(require_roles(RoleEnum.PARTICIPANT))):
     m=participant_team(db,user); team=m.team if m else None; sub=team.submission if team else None; event=team.event if team else event_for(db)

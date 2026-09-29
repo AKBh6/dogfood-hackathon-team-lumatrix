@@ -95,6 +95,7 @@ class JudgeInvitation(Base):
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
     email = Column(String(255), nullable=False)
+    tracks = Column(Text, nullable=False, default="")
     token = Column(String(128), unique=True, index=True, nullable=False)
     invited_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     accepted_at = Column(DateTime, nullable=True)

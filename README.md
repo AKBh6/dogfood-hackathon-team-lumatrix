@@ -135,6 +135,14 @@ Passwords are hashed with bcrypt and authentication uses signed JWTs. Protected 
 
 This is a hackathon prototype rather than a production identity or distributed event platform. It has no email verification, password reset, MFA, CSRF protection, persistent distributed rate limiter, external mail service, or database migration framework. The in-memory rate limiter resets when the process restarts.
 
+Team
+
+Built by Team Lumatrix for Dogfood 2026.
+
+Your Name - Team Lead
+Friend 1 - Developer
+Friend 2 - Developer
+
 ## License
 
 MIT

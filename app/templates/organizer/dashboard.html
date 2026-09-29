@@ -1,18 +1,1 @@
-{% extends "base.html" %}
-
-{% block title %}Organizer Dashboard{% endblock %}
-
-{% block nav %}
-<a href="/logout">Logout</a>
-{% endblock %}
-
-{% block content %}
-<div class="dashboard-container">
-    <h2>Organizer Control Center</h2>
-    <p>Welcome back, <strong>{{ user.full_name }}</strong></p>
-    <div class="card">
-        <h3>Hackathon Overview</h3>
-        <p>Configure rubric weights, track judge progress, and calculate final normalized Z-scores.</p>
-    </div>
-</div>
-{% endblock %}
+{% extends "base.html" %}{% block title %}Organizer Dashboard{% endblock %}{% block nav %}<a href="/organizer/event">Event</a><a href="/organizer/results">Results</a><a href="/logout">Logout</a>{% endblock %}{% block content %}<h1>Organizer Dashboard</h1><p>{{event.title}}</p><div class="grid three"><div class="stat-card"><b>Teams</b><strong>{{teams}}</strong></div><div class="stat-card"><b>Final submissions</b><strong>{{submissions}}</strong></div><div class="stat-card"><b>Scores</b><strong>{{scores}}</strong></div></div><form action="/organizer/assign" method="post"><button class="btn" type="submit">Assign judges</button></form>{% endblock %}

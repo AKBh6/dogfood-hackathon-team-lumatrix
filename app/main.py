@@ -18,7 +18,7 @@ app.include_router(judging.router,prefix="/api/judging")
 def now(): return datetime.now(timezone.utc)
 def dashboard(role): return "/judge/dashboard" if role==RoleEnum.JUDGE else "/organizer/dashboard" if role in (RoleEnum.ORGANIZER,RoleEnum.ADMIN) else "/participant/dashboard"
 def event_for(db): return db.query(Event).filter_by(slug="dogfood-2026").first()
-def participant_team(db,user): return db.query(TeamMember).join(Team).filter(TeamMember.user_id==user.id,Team.event_id==event_for(db).id).first()
+def get_participant_membership(db,user): return db.query(TeamMember).join(Team).filter(TeamMember.user_id==user.id,Team.event_id==event_for(db).id).first()
 @app.get("/",response_class=HTMLResponse)
 def landing(request:Request): return render(request,"index.html",{"request":request})
 @app.get("/register",response_class=HTMLResponse)
@@ -53,7 +53,7 @@ def api_gallery(search:str="",db:Session=Depends(get_db)):
 def create_team(name:str=Form(...),db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     event=event_for(db)
     if not event: raise HTTPException(500,"Demo event not initialized.")
-    if participant_team(db,user): raise HTTPException(400,"You already belong to a team for this event.")
+    if get_participant_membership(db,user): raise HTTPException(400,"You already belong to a team for this event.")
     if not name.strip(): raise HTTPException(400,"Team name is required.")
     team=Team(name=name.strip(),invite_code=secrets.token_urlsafe(8),event_id=event.id); db.add(team); db.flush(); db.add(TeamMember(user_id=user.id,team_id=team.id,is_leader=True)); db.commit()
     return RedirectResponse("/participant/team",303)

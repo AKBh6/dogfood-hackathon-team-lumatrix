@@ -204,7 +204,7 @@ def audit(db, event_id, user_id, action, target_type=None, target_id=None, reque
     ))
 
 @app.get("/vote", response_class=HTMLResponse)
-def voting_ballot(request: Request, db: Session = Depends(get_db), user: User | None = None):
+def voting_ballot(request: Request, db: Session = Depends(get_db)):
     event = voting_event(db)
     if now() > event.voting_deadline:
         raise HTTPException(403, "Community voting is closed.")

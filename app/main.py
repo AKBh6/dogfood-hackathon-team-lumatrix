@@ -393,11 +393,15 @@ def organizer_dashboard(request: Request, db: Session = Depends(get_db),
         assignments = [a for a in db.query(JudgeAssignment).filter_by(judge_id=judge.id).all()
                        if a.submission.team.event_id == event.id and judge_can_access_submission(db, judge.id, a.submission)]
         scored = 0
+        started = 0
         for a in assignments:
             count = db.query(Score).filter_by(judge_id=judge.id, submission_id=a.submission_id).count()
+            if count > 0:
+                started += 1
             if count >= criteria_count and criteria_count:
                 scored += 1
         progress.append({"judge": judge, "assigned": len(assignments), "completed": scored,
+                         "started": started, "not_started": max(0, len(assignments) - started),
                          "pending": max(0, len(assignments) - scored)})
     return render(request, "organizer/dashboard.html", {
         "request": request, "user": user, "event": event,
@@ -628,9 +632,14 @@ def export_progress(db: Session = Depends(get_db), user: User = Depends(require_
             1 for a in assignments
             if db.query(Score).filter_by(judge_id=judge.id, submission_id=a.submission_id).count() >= criteria_count
         )
+        started = sum(
+            1 for a in assignments
+            if db.query(Score).filter_by(judge_id=judge.id, submission_id=a.submission_id).count() > 0
+        )
         rows.append({"judge":judge.full_name,"email":judge.email,"assigned":len(assignments),
+                     "started":started,"not_started":len(assignments)-started,
                      "completed":completed,"pending":len(assignments)-completed})
-    return csv_response("judging-progress.csv", ["judge","email","assigned","completed","pending"], rows)
+    return csv_response("judging-progress.csv", ["judge","email","assigned","started","not_started","completed","pending"], rows)
 
 
 @app.get("/organizer/assignments", response_class=HTMLResponse)

@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db, engine, Base
 from app.models import User, RoleEnum, Event, Team, TeamMember, Submission, JudgeAssignment, Score
 from app.auth import hash_password, verify_password, create_access_token, require_roles, get_current_user
+from app.api import judging
 Base.metadata.create_all(bind=engine)
 app=FastAPI(title="Dogfood Platform")
 app.mount("/static",StaticFiles(directory="app/static"),name="static")
 templates=Jinja2Templates(directory="app/templates")
+app.include_router(judging.router,prefix="/api/judging")
 def now(): return datetime.now(timezone.utc)
 def dashboard(role): return "/judge/dashboard" if role==RoleEnum.JUDGE else "/organizer/dashboard" if role in (RoleEnum.ORGANIZER,RoleEnum.ADMIN) else "/participant/dashboard"
 def event_for(db): return db.query(Event).filter_by(slug="dogfood-2026").first()

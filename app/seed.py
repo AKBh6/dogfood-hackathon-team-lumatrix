@@ -1,87 +1,42 @@
-from datetime import datetime, timedelta, timezone
-import bcrypt
+from datetime import datetime, timezone
 from app.database import engine, Base, SessionLocal
-from app.models import User, RoleEnum, Event, RubricCriterion, Team, TeamMember, Submission
+from app.models import User, RoleEnum, Event, RubricCriterion, Team, TeamMember, Submission, JudgeAssignment
+from app.auth import hash_password
 
-def hash_pw(password: str) -> str:
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+DEMO_SUBMISSION_DEADLINE=datetime(2027,1,1,tzinfo=timezone.utc)
+DEMO_VOTING_DEADLINE=datetime(2027,1,8,tzinfo=timezone.utc)
 
 def seed_offline_fixtures():
-    # Ensure all tables exist before seeding
     Base.metadata.create_all(bind=engine)
-    
-    db = SessionLocal()
+    db=SessionLocal()
     try:
-        if db.query(User).first():
-            print("Database already seeded.")
-            return
-
-        # 1. Base Users
-        admin = User(
-            email="admin@raptors.dev",
-            full_name="Hackathon Admin",
-            hashed_password=hash_pw("admin123"),
-            role=RoleEnum.ADMIN
-        )
-        judge = User(
-            email="judge@raptors.dev",
-            full_name="Principal Judge",
-            hashed_password=hash_pw("judge123"),
-            role=RoleEnum.JUDGE
-        )
-        participant = User(
-            email="builder@raptors.dev",
-            full_name="Lead Builder",
-            hashed_password=hash_pw("build123"),
-            role=RoleEnum.PARTICIPANT
-        )
-        db.add_all([admin, judge, participant])
+        admin=db.query(User).filter_by(email="admin@raptors.dev").first()
+        if not admin:
+            admin=User(email="admin@raptors.dev",full_name="Hackathon Admin",hashed_password=hash_password("admin123"),role=RoleEnum.ADMIN); db.add(admin)
+        judge=db.query(User).filter_by(email="judge@raptors.dev").first()
+        if not judge:
+            judge=User(email="judge@raptors.dev",full_name="Principal Judge",hashed_password=hash_password("judge123"),role=RoleEnum.JUDGE); db.add(judge)
+        participant=db.query(User).filter_by(email="builder@raptors.dev").first()
+        if not participant:
+            participant=User(email="builder@raptors.dev",full_name="Lead Builder",hashed_password=hash_password("build123"),role=RoleEnum.PARTICIPANT); db.add(participant)
         db.flush()
-
-        # 2. Dogfood Hackathon Event
-        now = datetime.now(timezone.utc)
-        event = Event(
-            slug="dogfood-2026",
-            title="Dogfood 2026 | 72-Hour Hackathon",
-            submission_deadline=now + timedelta(days=2),
-            voting_deadline=now + timedelta(days=4),
-            is_active=True
-        )
-        db.add(event)
+        event=db.query(Event).filter_by(slug="dogfood-2026").first()
+        if not event:
+            event=Event(slug="dogfood-2026",title="Dogfood 2026 | 72-Hour Hackathon",submission_deadline=DEMO_SUBMISSION_DEADLINE,voting_deadline=DEMO_VOTING_DEADLINE,is_active=True); db.add(event); db.flush()
+        criteria=[("Tier Completion & Correctness",.40),("Judging Integrity",.25),("Adoptability & Operability",.20),("Code Quality & Innovation",.15)]
+        for name,weight in criteria:
+            if not db.query(RubricCriterion).filter_by(event_id=event.id,name=name).first(): db.add(RubricCriterion(event_id=event.id,name=name,weight=weight,max_score=10))
         db.flush()
-
-        # 3. Standard Rubrics
-        criteria = [
-            RubricCriterion(event_id=event.id, name="Tier Completion & Correctness", weight=0.40, max_score=10),
-            RubricCriterion(event_id=event.id, name="Judging Integrity", weight=0.25, max_score=10),
-            RubricCriterion(event_id=event.id, name="Adoptability & Operability", weight=0.20, max_score=10),
-            RubricCriterion(event_id=event.id, name="Code Quality & Innovation", weight=0.15, max_score=10),
-        ]
-        db.add_all(criteria)
-        db.flush()
-
-        # 4. Fixture Team & Submission
-        team = Team(name="Lumatrix", invite_code="LUMA-2026-X", event_id=event.id)
-        db.add(team)
-        db.flush()
-
-        db.add(TeamMember(user_id=participant.id, team_id=team.id, is_leader=True))
-        
-        sub = Submission(
-            team_id=team.id,
-            title="Dogfood Platform Core",
-            description="Offline-first hackathon runner with backend role isolation and z-score normalization.",
-            repo_url="https://github.com/lumatrix/dogfood-core",
-            demo_url="http://localhost:8000/gallery",
-            is_draft=False,
-            submitted_at=now
-        )
-        db.add(sub)
+        team=db.query(Team).filter_by(event_id=event.id,name="Lumatrix").first()
+        if not team:
+            team=Team(name="Lumatrix",invite_code="LUMA-2026-X",event_id=event.id); db.add(team); db.flush()
+        if not db.query(TeamMember).filter_by(user_id=participant.id,team_id=team.id).first(): db.add(TeamMember(user_id=participant.id,team_id=team.id,is_leader=True))
+        sub=db.query(Submission).filter_by(team_id=team.id).first()
+        if not sub:
+            sub=Submission(team_id=team.id,title="Dogfood Platform Core",description="Offline-first hackathon management platform with role isolation and normalized judging.",repo_url="https://github.com/AKBh6/dogfood-hackathon-team-lumatrix",demo_url="http://localhost:8000/gallery",is_draft=False,submitted_at=datetime.now(timezone.utc)); db.add(sub); db.flush()
+        if not db.query(JudgeAssignment).filter_by(judge_id=judge.id,submission_id=sub.id).first(): db.add(JudgeAssignment(judge_id=judge.id,submission_id=sub.id))
         db.commit()
-        print("Successfully seeded fixture data.")
-    finally:
-        db.close()
+        print("Seed complete.")
+    finally: db.close()
 
-if __name__ == "__main__":
-    seed_offline_fixtures()
+if __name__=="__main__": seed_offline_fixtures()

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import secrets
+import re
 from fastapi import FastAPI, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +14,7 @@ Base.metadata.create_all(bind=engine)
 app=FastAPI(title="Dogfood Platform")
 app.mount("/static",StaticFiles(directory="app/static"),name="static")
 templates=Jinja2Templates(directory="app/templates")
-def render(request,name,context): return templates.TemplateResponse(request=request,name=name,context=context)
+def render(request,name,context,status_code=200): return templates.TemplateResponse(request=request,name=name,context=context,status_code=status_code)
 app.include_router(judging.router,prefix="/api/judging")
 def now(): return datetime.now(timezone.utc)
 def dashboard(role): return "/judge/dashboard" if role==RoleEnum.JUDGE else "/organizer/dashboard" if role in (RoleEnum.ORGANIZER,RoleEnum.ADMIN) else "/participant/dashboard"
@@ -25,10 +26,13 @@ def landing(request:Request): return render(request,"index.html",{"request":requ
 def register_page(request:Request): return render(request,"register.html",{"request":request})
 @app.post("/register")
 def register(request:Request,full_name:str=Form(...),email:str=Form(...),password:str=Form(...),db:Session=Depends(get_db)):
+    full_name=full_name.strip()
     email=email.strip().lower()
-    if db.query(User).filter_by(email=email).first(): return templates.TemplateResponse("register.html",{"request":request,"error":"An account with this email already exists."},status_code=400)
-    if len(password)<6: return templates.TemplateResponse("register.html",{"request":request,"error":"Password must be at least 6 characters."},status_code=400)
-    db.add(User(full_name=full_name.strip(),email=email,hashed_password=hash_password(password),role=RoleEnum.PARTICIPANT)); db.commit()
+    if not full_name: return render(request,"register.html",{"request":request,"error":"Full name is required."},400)
+    if not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+",email): return render(request,"register.html",{"request":request,"error":"Enter a valid email address."},400)
+    if db.query(User).filter_by(email=email).first(): return render(request,"register.html",{"request":request,"error":"An account with this email already exists."},400)
+    if len(password)<6: return render(request,"register.html",{"request":request,"error":"Password must be at least 6 characters."},400)
+    db.add(User(full_name=full_name,email=email,hashed_password=hash_password(password),role=RoleEnum.PARTICIPANT)); db.commit()
     return RedirectResponse("/login?registered=1",303)
 @app.get("/login",response_class=HTMLResponse)
 def login_page(request:Request,registered:bool=False,error:str|None=None): return render(request,"login.html",{"request":request,"message":"Account created successfully. Please sign in." if registered else None,"error":error})

@@ -161,6 +161,8 @@ def accept_judge_invite(request: Request, token: str, full_name: str = Form(...)
     user = User(email=email, full_name=full_name.strip(), hashed_password=hash_password(password), role=RoleEnum.JUDGE)
     db.add(user)
     invitation.accepted_at = now()
+    for track in parse_lines(invitation.tracks):
+        db.add(JudgeTrack(judge_id=user.id, event_id=invitation.event_id, track=track))
     db.commit()
     return RedirectResponse("/login?registered=1", 303)
 
@@ -413,7 +415,7 @@ def organizer_event(request: Request, db: Session = Depends(get_db),
     event = event_for(db)
     return render(request, "organizer/event.html", {
         "request": request, "user": user, "event": event,
-        "criteria": event.rubrics, "tracks": parse_lines(event.tracks),
+        "criteria": event.rubrics, "tracks": parse_lines(event.tracks), "invitations": db.query(JudgeInvitation).filter_by(event_id=event.id).all(),
         "questions": parse_lines(event.custom_questions)
     })
 
@@ -520,7 +522,7 @@ def invite_judges(emails: str = Form(...), tracks: str = Form(""),
         if db.query(User).filter_by(email=email).first():
             continue
         token = secrets.token_urlsafe(24)
-        db.add(JudgeInvitation(event_id=event.id, email=email, token=token))
+        db.add(JudgeInvitation(event_id=event.id, email=email, token=token, tracks="\n".join(selected_tracks)))
         invited.append({"email": email, "token": token})
     db.commit()
     return render(request=None if False else Request, "organizer/event.html", {}) if False else RedirectResponse("/organizer/event?invited=1", 303)

@@ -4,8 +4,8 @@ from app.models import User, RoleEnum, Event, RubricCriterion, Team, TeamMember,
 import jwt
 from app.auth import hash_password, SECRET_KEY, ALGORITHM
 
-DEMO_SUBMISSION_DEADLINE=datetime(2026,3,1,18,tzinfo=timezone.utc)
-DEMO_VOTING_DEADLINE=datetime(2026,3,8,18,tzinfo=timezone.utc)
+DEMO_SUBMISSION_DEADLINE=datetime(2026,10,1,18,tzinfo=timezone.utc)
+DEMO_VOTING_DEADLINE=datetime(2026,10,4,18,tzinfo=timezone.utc)
 
 def seed_offline_fixtures():
     Base.metadata.create_all(bind=engine)
@@ -26,7 +26,7 @@ def seed_offline_fixtures():
         db.flush()
         event=db.query(Event).filter_by(slug="dogfood-2026").first()
         if not event:
-            event=Event(slug="dogfood-2026",title="Sample Hack 2026 | Dogfood 72-Hour Hackathon",submission_deadline=DEMO_SUBMISSION_DEADLINE,voting_deadline=DEMO_VOTING_DEADLINE,start_at=datetime(2026,12,29,tzinfo=timezone.utc),end_at=datetime(2027,1,1,tzinfo=timezone.utc),tracks="General\nAI\nWeb",prizes="1st Place\n2nd Place\nBest Technical Implementation",custom_questions="What problem does this solve?\nWhat would you improve next?",is_active=True); db.add(event); db.flush()
+            event=Event(slug="dogfood-2026",title="Sample Hack 2026 | Dogfood 72-Hour Hackathon",submission_deadline=DEMO_SUBMISSION_DEADLINE,voting_deadline=DEMO_VOTING_DEADLINE,start_at=datetime(2026,12,29,tzinfo=timezone.utc),end_at=datetime(2027,1,1,tzinfo=timezone.utc),tracks="General\nAI\nWeb",prizes="1st Place\n2nd Place\nBest Technical Implementation",custom_questions="What problem does this solve?\nWhat would you improve next?",voting_access="open",voting_start_at=datetime(2026,10,2,18,tzinfo=timezone.utc),is_active=True); db.add(event); db.flush()
         criteria=[("Tier Completion & Correctness",.40),("Judging Integrity",.25),("Adoptability & Operability",.20),("Code Quality & Innovation",.15)]
         for name,weight in criteria:
             if not db.query(RubricCriterion).filter_by(event_id=event.id,name=name).first(): db.add(RubricCriterion(event_id=event.id,name=name,weight=weight,max_score=10))

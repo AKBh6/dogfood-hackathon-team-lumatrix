@@ -1,6 +1,6 @@
 # Judging
 
-The event rubric currently has four criteria:
+Dogfood uses an event-specific weighted rubric. The seeded Dogfood 2026 event currently defines four criteria:
 
 | Criterion | Weight | Maximum |
 |---|---:|---:|
@@ -9,28 +9,71 @@ The event rubric currently has four criteria:
 | Adoptability & Operability | 20% | 10 |
 | Code Quality & Innovation | 15% | 10 |
 
-Judges score only submissions assigned to them. The API checks the assignment, verifies that the criterion belongs to the submission's event, and rejects scores outside the criterion's allowed range.
+The application stores each criterion as a `RubricCriterion`, so an event can use a different set of criteria and weights.
 
-## Raw score
+## Assignment and access control
 
-Each criterion contributes:
+Judges are assigned to submissions through `JudgeAssignment`. The assignment is unique per judge/submission pair.
 
-`raw_score / max_score * weight * 100`
+When a judge submits an evaluation, the backend verifies:
 
-The organizer results page sums these weighted contributions for each submission.
+1. the authenticated user is a judge;
+2. the submission exists;
+3. the judge is assigned to that submission;
+4. each criterion belongs to the submission's event; and
+5. every score is within the criterion's configured range.
 
-## Normalization
+This keeps judge isolation in the backend rather than relying only on hidden frontend controls.
 
-The implementation applies judge-relative z-score normalization to weighted evaluations. For each judge, it calculates that judge's mean and standard deviation across the submissions represented in the evaluation data:
+## Weighted raw score
 
-`Z = (score - mean) / standard_deviation`
+For each criterion:
 
-A judge with identical scores across their evaluations receives zero z-scores because the standard deviation is zero.
+```
+criterion contribution =
+(raw score / maximum score) × weight × 100
+```
 
-For each submission, the mean z-score across available judge evaluations is mapped to a 0-100 display range using:
+The organizer results view sums the weighted criterion contributions for each submission.
 
-`50 + mean_z * 15`
+## Cross-judge normalization
 
-The result is clamped to 0-100.
+The prototype applies judge-relative z-score normalization to weighted evaluation scores.
 
-This is a normalization mechanism for the prototype, not a claim that all forms of judge bias are eliminated.
+For each judge:
+
+```
+Z = (score - judge mean) / judge standard deviation
+```
+
+If a judge gives identical scores to all represented submissions, the standard deviation is zero and the implementation uses zero z-scores for that judge.
+
+For each submission, the available judge z-scores are averaged and mapped to a display score:
+
+```
+normalized score = 50 + mean z-score × 15
+```
+
+The resulting value is clamped to the 0-100 range.
+
+This normalization reduces the effect of different judge scoring distributions. It does not prove that all forms of bias have been eliminated and is intentionally presented as a prototype normalization method.
+
+## Community voting
+
+Community voting is separate from judge scoring.
+
+The event controls:
+
+- voting start time;
+- voting deadline;
+- access mode: open, email-gated, or authenticated.
+
+The ballot order is randomized server-side. A voter receives a stable voter key, and a database uniqueness constraint allows only one vote per voter key for an event. Authenticated users can also be associated with their account.
+
+Voting requests are rate-limited per IP using an in-memory minute bucket. Duplicate attempts and rate-limited requests are recorded in the audit log.
+
+Public results are hidden before the voting period closes. Organizer-facing result and audit views remain available according to their authorization rules.
+
+## Operational judging outputs
+
+The platform can expose normalized results to organizers, generate participation certificates for submissions, export submission data as CSV, and generate signed judge participation records using Ed25519 signatures. These features complement the core judging workflow rather than changing the scoring calculation.

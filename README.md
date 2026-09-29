@@ -140,7 +140,9 @@ Team
 Built by Team Lumatrix for Dogfood 2026.
 
 Arkesh Bhattacharya - Team Lead
+
 Argha Ghosh - Developer
+
 Ritul Sharma - Developer
 
 ## License
